@@ -73,12 +73,9 @@ func (b *BindStream) readStream(ep *streamEndpoint) {
 	defer b.wg.Done()
 
 	for {
-		var err error
-
 		sp := b.streamPacketPool.Get().(*streamPacketQueue)
-		sp.ep = ep
-		sp.n, err = ep.conn.Read(sp.buf[:])
-		sp.err = err
+		n, err := ep.conn.Read(sp.buf[:])
+		sp.ep, sp.err, sp.n = ep, err, n
 		b.queue <- sp
 
 		if err != nil {
@@ -255,7 +252,7 @@ func (b *BindStream) BatchSize() int {
 }
 
 func (b *BindStream) SetObfsIn(obfs conceal.Obfs) {
-	b.obfConnOpts.ObfsOut = obfs
+	b.obfConnOpts.ObfsIn = obfs
 }
 
 func (b *BindStream) SetObfsOut(obfs conceal.Obfs) {
@@ -265,9 +262,10 @@ func (b *BindStream) SetObfsOut(obfs conceal.Obfs) {
 var _ Endpoint = (*streamEndpoint)(nil)
 
 type streamEndpoint struct {
-	conn  net.Conn
+	conn net.Conn
+
 	dst   netip.AddrPort
-	mutex sync.Mutex
+	mutex sync.RWMutex
 }
 
 func streamEndpointFromConn(conn net.Conn) (*streamEndpoint, error) {
