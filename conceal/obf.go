@@ -6,8 +6,8 @@ import (
 
 type Obf interface {
 	Spec() string
-	Read(reader io.Reader, ctx *readContext) error
-	Write(writer io.Writer, ctx *writeContext) error
+	Read(r io.Reader, ctx *readContext) error
+	Write(w io.Writer, ctx *writeContext) error
 }
 
 type Obfs []Obf

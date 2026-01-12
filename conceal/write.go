@@ -14,22 +14,22 @@ type writeContext struct {
 	*BufferPool
 }
 
-func (o *bytesObf) Write(writer io.Writer, ctx *writeContext) error {
-	_, err := writer.Write(o.data)
+func (o *bytesObf) Write(w io.Writer, ctx *writeContext) error {
+	_, err := w.Write(o.data)
 	return err
 }
 
-func (o *dataObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *dataObf) Write(w io.Writer, ctx *writeContext) error {
 	buf := ctx.PullHead(-1)
 	if buf == nil {
 		return io.ErrShortBuffer
 	}
 
-	_, err := writer.Write(buf)
+	_, err := w.Write(buf)
 	return err
 }
 
-func (o *dataSizeObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *dataSizeObf) Write(w io.Writer, ctx *writeContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
@@ -41,7 +41,7 @@ func (o *dataSizeObf) Write(writer io.Writer, ctx *writeContext) error {
 			tmp[i] = byte(size & 0xFF)
 			size >>= 8
 		}
-		if _, err := writer.Write(tmp[:o.length]); err != nil {
+		if _, err := w.Write(tmp[:o.length]); err != nil {
 			return err
 		}
 	case NumFormatLE:
@@ -49,21 +49,21 @@ func (o *dataSizeObf) Write(writer io.Writer, ctx *writeContext) error {
 			tmp[i] = byte(size & 0xFF)
 			size >>= 8
 		}
-		if _, err := writer.Write(tmp[:o.length]); err != nil {
+		if _, err := w.Write(tmp[:o.length]); err != nil {
 			return err
 		}
 	case NumFormatAscii:
 		b := strconv.AppendInt(tmp[:0], int64(size), 10)
 		b = append(b, o.end)
 
-		if _, err := writer.Write(b); err != nil {
+		if _, err := w.Write(b); err != nil {
 			return err
 		}
 	case NumFormatHex:
 		b := strconv.AppendInt(tmp[:0], int64(size), 16)
 		b = append(b, o.end)
 
-		if _, err := writer.Write(b); err != nil {
+		if _, err := w.Write(b); err != nil {
 			return err
 		}
 	}
@@ -71,7 +71,7 @@ func (o *dataSizeObf) Write(writer io.Writer, ctx *writeContext) error {
 	return nil
 }
 
-func (o *dataStringObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *dataStringObf) Write(w io.Writer, ctx *writeContext) error {
 	data := ctx.PullHead(-1)
 	if data == nil {
 		return io.ErrShortBuffer
@@ -85,24 +85,24 @@ func (o *dataStringObf) Write(writer io.Writer, ctx *writeContext) error {
 
 	base64.RawStdEncoding.Encode(buf, data)
 
-	_, err := writer.Write(buf)
+	_, err := w.Write(buf)
 	return err
 }
 
-func (o *randObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *randObf) Write(w io.Writer, ctx *writeContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
 	buf := tmp[:o.length]
 	rand.Read(buf)
 
-	_, err := writer.Write(buf)
+	_, err := w.Write(buf)
 	return err
 }
 
 const chars52 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-func (o *randCharObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *randCharObf) Write(w io.Writer, ctx *writeContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
@@ -112,13 +112,13 @@ func (o *randCharObf) Write(writer io.Writer, ctx *writeContext) error {
 		buf[i] = chars52[buf[i]%52]
 	}
 
-	_, err := writer.Write(buf)
+	_, err := w.Write(buf)
 	return err
 }
 
 const digits10 = "0123456789"
 
-func (o *randDigitObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *randDigitObf) Write(w io.Writer, ctx *writeContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
@@ -128,11 +128,11 @@ func (o *randDigitObf) Write(writer io.Writer, ctx *writeContext) error {
 		buf[i] = digits10[buf[i]%10]
 	}
 
-	_, err := writer.Write(buf)
+	_, err := w.Write(buf)
 	return err
 }
 
-func (o *timestampObf) Write(writer io.Writer, ctx *writeContext) error {
+func (o *timestampObf) Write(w io.Writer, ctx *writeContext) error {
 	timestamp := uint32(time.Now().Unix())
-	return binary.Write(writer, binary.BigEndian, timestamp)
+	return binary.Write(w, binary.BigEndian, timestamp)
 }

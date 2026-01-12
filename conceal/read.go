@@ -21,12 +21,25 @@ type readContext struct {
 	nextDataSize int
 }
 
-func (o *bytesObf) Read(reader io.Reader, ctx *readContext) error {
+func ReadUntil(r io.Reader, b []byte, delim byte) (n int, err error) {
+	for n < len(b) {
+		if _, err = r.Read(b[n : n+1]); err != nil {
+			return n, err
+		}
+		if b[n] == delim {
+			return n, nil
+		}
+		n++
+	}
+	return n, io.ErrShortBuffer
+}
+
+func (o *bytesObf) Read(r io.Reader, ctx *readContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
 	buf := tmp[:len(o.data)]
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return err
 	}
 
@@ -37,89 +50,80 @@ func (o *bytesObf) Read(reader io.Reader, ctx *readContext) error {
 	return nil
 }
 
-func (o *dataObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *dataObf) Read(r io.Reader, ctx *readContext) error {
 	buf := ctx.PushTail(ctx.nextDataSize)
 	if buf == nil {
 		return io.ErrShortBuffer
 	}
 
-	_, err := io.ReadFull(reader, buf)
+	_, err := io.ReadFull(r, buf)
 	return err
 }
 
-func (o *dataSizeObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *dataSizeObf) Read(r io.Reader, ctx *readContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
-
-	var size int
 
 	switch o.format {
 	case NumFormatBE:
 		buf := tmp[:o.length]
-		if _, err := io.ReadFull(reader, buf); err != nil {
+		if _, err := io.ReadFull(r, buf); err != nil {
 			return err
 		}
+		var size int
 		for i := range buf {
 			size <<= 8
 			size |= int(buf[i])
 		}
+		ctx.nextDataSize = size
+
 	case NumFormatLE:
 		buf := tmp[:o.length]
-		if _, err := io.ReadFull(reader, buf); err != nil {
+		if _, err := io.ReadFull(r, buf); err != nil {
 			return err
 		}
+		var size int
 		for i := len(buf) - 1; i >= 0; i-- {
 			size <<= 8
 			size |= int(buf[i])
 		}
-	case NumFormatAscii:
-		i := 0
-		for {
-			if _, err := io.ReadFull(reader, tmp[i:i+1]); err != nil {
-				return err
-			}
-			if tmp[i] == o.end {
-				break
-			}
-			i++
-		}
+		ctx.nextDataSize = size
 
-		size64, err := strconv.ParseInt(string(tmp[:i]), 10, 32)
+	case NumFormatAscii:
+		n, err := ReadUntil(r, tmp, o.end)
 		if err != nil {
 			return err
 		}
-		size = int(size64)
+
+		size64, err := strconv.ParseInt(string(tmp[:n]), 10, 32)
+		if err != nil {
+			return err
+		}
+		ctx.nextDataSize = int(size64)
 
 	case NumFormatHex:
-		i := 0
-		for {
-			if _, err := io.ReadFull(reader, tmp[i:i+1]); err != nil {
-				return err
-			}
-			if tmp[i] == o.end {
-				break
-			}
-			i++
-		}
-
-		size64, err := strconv.ParseInt(string(tmp[:i]), 16, 32)
+		n, err := ReadUntil(r, tmp, o.end)
 		if err != nil {
 			return err
 		}
-		size = int(size64)
+
+		size64, err := strconv.ParseInt(string(tmp[:n]), 16, 32)
+		if err != nil {
+			return err
+		}
+		ctx.nextDataSize = int(size64)
 	}
 
-	ctx.nextDataSize = size
 	return nil
 }
 
-func (o *dataStringObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *dataStringObf) Read(r io.Reader, ctx *readContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
 	base64len := base64.RawStdEncoding.EncodedLen(ctx.nextDataSize)
 	buf := tmp[:base64len]
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return err
 	}
 
@@ -137,12 +141,12 @@ func (o *dataStringObf) Read(reader io.Reader, ctx *readContext) error {
 	return nil
 }
 
-func (o *randObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *randObf) Read(r io.Reader, ctx *readContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
 	buf := tmp[:o.length]
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return err
 	}
 
@@ -151,12 +155,12 @@ func (o *randObf) Read(reader io.Reader, ctx *readContext) error {
 	return nil
 }
 
-func (o *randCharObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *randCharObf) Read(r io.Reader, ctx *readContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
 	buf := tmp[:o.length]
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return err
 	}
 
@@ -169,12 +173,12 @@ func (o *randCharObf) Read(reader io.Reader, ctx *readContext) error {
 	return nil
 }
 
-func (o *randDigitObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *randDigitObf) Read(r io.Reader, ctx *readContext) error {
 	tmp := ctx.GetBuffer()
 	defer ctx.Put(tmp)
 
 	buf := tmp[:o.length]
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return err
 	}
 
@@ -187,9 +191,9 @@ func (o *randDigitObf) Read(reader io.Reader, ctx *readContext) error {
 	return nil
 }
 
-func (o *timestampObf) Read(reader io.Reader, ctx *readContext) error {
+func (o *timestampObf) Read(r io.Reader, ctx *readContext) error {
 	var timestamp uint32
-	if err := binary.Read(reader, binary.BigEndian, &timestamp); err != nil {
+	if err := binary.Read(r, binary.BigEndian, &timestamp); err != nil {
 		return err
 	}
 
