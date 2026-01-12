@@ -50,18 +50,45 @@ func (o *dataSizeObf) Read(reader io.Reader, ctx *readContext) error {
 	tmp := ctx.tmpPool.GetBuffer()
 	defer ctx.tmpPool.Put(tmp)
 
-	buf := tmp[:o.length]
-	if _, err := io.ReadFull(reader, buf); err != nil {
-		return err
-	}
-
 	var size int
-	for _, b := range buf {
-		size <<= 8
-		size |= int(b)
-	}
-	ctx.nextDataSize = size
 
+	switch o.format {
+	case NumFormatBE:
+		buf := tmp[:o.length]
+		if _, err := io.ReadFull(reader, buf); err != nil {
+			return err
+		}
+		for i := range buf {
+			size <<= 8
+			size |= int(buf[i])
+		}
+	case NumFormatLE:
+		buf := tmp[:o.length]
+		if _, err := io.ReadFull(reader, buf); err != nil {
+			return err
+		}
+		for i := len(buf) - 1; i >= 0; i-- {
+			size <<= 8
+			size |= int(buf[i])
+		}
+	case NumFormatAscii:
+		for {
+			buf := tmp[:1]
+			if _, err := io.ReadFull(reader, buf); err != nil {
+				return err
+			}
+			if buf[0] == o.end {
+				break
+			}
+			if buf[0] < '0' || buf[0] > '9' {
+				return errors.New("non-number symbol")
+			}
+			size *= 10
+			size += int(buf[0] - '0')
+		}
+	}
+
+	ctx.nextDataSize = size
 	return nil
 }
 

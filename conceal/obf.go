@@ -27,7 +27,9 @@ type randObf struct {
 }
 
 type dataSizeObf struct {
+	format NumFormat
 	length int
+	end    byte
 }
 
 type dataObf struct {

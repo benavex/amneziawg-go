@@ -30,7 +30,11 @@ func (o *randObf) Spec() string {
 }
 
 func (o *dataSizeObf) Spec() string {
-	return fmt.Sprintf("<dz %d>", o.length)
+	if o.format == NumFormatAscii {
+		return fmt.Sprintf("<dz %s 0x%02x>", o.format.ToString(), o.end)
+	} else {
+		return fmt.Sprintf("<dz %s %d>", o.format.ToString(), o.length)
+	}
 }
 
 func (o *dataObf) Spec() string {

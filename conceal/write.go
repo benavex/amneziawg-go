@@ -32,16 +32,49 @@ func (o *dataSizeObf) Write(writer io.Writer, ctx *writeContext) error {
 	tmp := ctx.tmpPool.GetBuffer()
 	defer ctx.tmpPool.Put(tmp)
 
-	buf := tmp[:o.length]
+	var size int = ctx.Cap()
 
-	size := uint32(ctx.Cap())
-	for i := o.length - 1; i >= 0; i-- {
-		buf[i] = byte(size & 0xFF)
-		size >>= 8
+	switch o.format {
+	case NumFormatBE:
+		for i := o.length - 1; i >= 0; i-- {
+			tmp[i] = byte(size & 0xFF)
+			size >>= 8
+		}
+		if _, err := writer.Write(tmp[:o.length]); err != nil {
+			return err
+		}
+	case NumFormatLE:
+		for i := range o.length {
+			tmp[i] = byte(size & 0xFF)
+			size >>= 8
+		}
+		if _, err := writer.Write(tmp[:o.length]); err != nil {
+			return err
+		}
+	case NumFormatAscii:
+		var symbols int
+		if size == 0 {
+			symbols = 1
+		} else {
+			tmpSize := size
+			for tmpSize > 0 {
+				symbols++
+				tmpSize /= 10
+			}
+		}
+
+		for i := symbols - 1; i >= 0; i-- {
+			tmp[i] = byte(size%10 + '0')
+			size /= 10
+		}
+		tmp[symbols] = o.end
+
+		if _, err := writer.Write(tmp[:symbols+1]); err != nil {
+			return err
+		}
 	}
 
-	_, err := writer.Write(buf)
-	return err
+	return nil
 }
 
 func (o *dataStringObf) Write(writer io.Writer, ctx *writeContext) error {

@@ -41,24 +41,19 @@ func BuildObfs(spec string) (Obfs, error) {
 		end += start
 
 		tag := remaining[start+1 : end]
-		parts := strings.Fields(tag)
-		if len(parts) == 0 {
+		if len(tag) == 0 {
 			errs = append(errs, errors.New("empty tag"))
 			remaining = remaining[end+1:]
 			continue
 		}
 
-		key := parts[0]
+		key, val, _ := strings.Cut(tag, " ")
+
 		builder, ok := obfBuilders[key]
 		if !ok {
 			errs = append(errs, fmt.Errorf("unknown tag <%s>", key))
 			remaining = remaining[end+1:]
 			continue
-		}
-
-		val := ""
-		if len(parts) > 1 {
-			val = parts[1]
 		}
 
 		o, err := builder(val)
@@ -117,13 +112,46 @@ func buildRandObf(val string) (Obf, error) {
 }
 
 func buildDataSizeObf(val string) (Obf, error) {
-	length, err := strconv.Atoi(val)
-	if err != nil {
+	var (
+		length int       = 2
+		format NumFormat = NumFormatBE
+		end    byte      = 0
+		err    error
+	)
+
+	parts := strings.Fields(val)
+	if len(parts) != 2 {
+		return nil, errors.New("wrong amount of arguments")
+	}
+
+	if format, err = NumFormatFromString(parts[0]); err != nil {
 		return nil, err
+	}
+
+	if format == NumFormatAscii {
+		parts[1] = strings.TrimPrefix(parts[1], "0x")
+
+		var bytes []byte
+		bytes, err = hex.DecodeString(parts[1])
+		if err != nil {
+			return nil, err
+		}
+
+		if len(bytes) != 1 {
+			return nil, errors.New("too many bytes")
+		}
+
+		end = bytes[0]
+	} else {
+		if length, err = strconv.Atoi(parts[1]); err != nil {
+			return nil, err
+		}
 	}
 
 	return &dataSizeObf{
 		length: length,
+		format: format,
+		end:    end,
 	}, nil
 }
 
