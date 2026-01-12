@@ -108,10 +108,11 @@ These packets are being send prior to every handshake, in the same way as Junk p
 Value as a tag-sequence, as described in Tag format paragraph
 
 ### Network
+
+**`Network: "udp" | "tcp"`**
 - A network which device would use to connect to peers
-- **Format** `Network = [network]`
-- `[network]` could be `udp` or `tcp`
-- In case of `tcp`, the connection is always initiated by the peer which has `Endpoint` specified. Devices always listen on `ListenPort` if it is specified
+- In case of `tcp`, the connection is always initiated by the peer which has `Endpoint` specified
+- In case of `tcp`, the device would not listen if `ListenPort` is omitted
 
 > [!IMPORTANT]
 > For TCP network it is really neccessary to specify `<dz>` tag somewhere because of the stream nature - the original packet could be coalecsed with the next one or splitted into the fragments
@@ -120,19 +121,22 @@ Value as a tag-sequence, as described in Tag format paragraph
 > Always put `<d>` tag in the format.
 
 > [!IMPORTANT]
-> Peer's `FormatIn` must be the same as the device's `FormatOut` for ***machines*** to understand each other formats
+> Peer's `FormatIn` must be the same as device's `FormatOut` for ***machines*** to understand each other formats
 
-### Format of input
-- A format of packet which AWG device would expect on the input side instead of the original WG packet. The packet could be a part of the stream if `<dz>` is specified
-- **Format** `FormatIn = [fmt]`
-- `[fmt]` is a tag-sequence specified in Tags format section
-- **Example** `FormatIn = <b 0x4567><dz be 4><r 12><d><t>`
+### Message format
 
-### Format of output
-A format of packet which AWG device would generate on the output side instead of the original WG packet. The whole packet would be generated as a single piece and would be sent to the system as-is
-- **Format** `FormatOut = [fmt]`
-- `[fmt]` is a tag-sequence specified in Tags format section
-- **Example** `FormatOut = <b 0x1234><dz be 4><d>`
+**`FormatIn: string of tags`**
+- A format of packet which AWG device would expect on the input side instead of the original WG packet
+- The packet could be a part of the stream if `<dz>` is specified
+
+**`FormatOut: string of tags`**
+- A format of packet which AWG device would generate on the output side instead of the original WG packet. The whole packet would be generated as a single piece and would be sent to the system as-is
+
+- **Example**
+```
+FormatIn = <b 0x4567><dz be 4><r 12><d><t>
+FormatOut = <b 0x1234><dz be 4><d>
+```
 
 ## Tags format
 
