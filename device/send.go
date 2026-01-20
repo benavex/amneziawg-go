@@ -183,8 +183,16 @@ func (peer *Peer) SendHandshakeResponse() error {
 func (device *Device) SendHandshakeCookie(initiatingElem *QueueHandshakeElement) error {
 	device.log.Verbosef("Sending cookie response for denied handshake message for %v", initiatingElem.endpoint.DstToString())
 
+	opts := &device.net.framedOpts
+	var typ uint32
+	if opts.HeaderCompat && opts.H3 != nil {
+		typ = opts.H3.Generate()
+	} else {
+		typ = MessageCookieReplyType
+	}
+
 	sender := binary.LittleEndian.Uint32(initiatingElem.packet[4:8])
-	reply, err := device.cookieChecker.CreateReply(initiatingElem.packet, sender, initiatingElem.endpoint.DstToBytes())
+	reply, err := device.cookieChecker.CreateReply(initiatingElem.packet, sender, initiatingElem.endpoint.DstToBytes(), typ)
 	if err != nil {
 		device.log.Errorf("Failed to create cookie reply: %v", err)
 		return err
@@ -460,7 +468,15 @@ func (device *Device) RoutineEncryption(id int) {
 			fieldReceiver := header[4:8]
 			fieldNonce := header[8:16]
 
-			binary.LittleEndian.PutUint32(fieldType, MessageTransportType)
+			opts := &device.net.framedOpts
+			var typ uint32
+			if opts.HeaderCompat && opts.H4 != nil {
+				typ = opts.H4.Generate()
+			} else {
+				typ = MessageTransportType
+			}
+
+			binary.LittleEndian.PutUint32(fieldType, typ)
 			binary.LittleEndian.PutUint32(fieldReceiver, elem.keypair.remoteIndex)
 			binary.LittleEndian.PutUint64(fieldNonce, elem.nonce)
 

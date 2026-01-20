@@ -41,12 +41,11 @@ type Device struct {
 	net struct {
 		stopping sync.WaitGroup
 		sync.RWMutex
-		bind          conn.Bind // bind interface
-		netlinkCancel *rwcancel.RWCancel
-		port          uint16 // listening port
-		fwmark        uint32 // mark value (0 = disabled)
-		brokenRoaming bool
-
+		bind           conn.Bind // bind interface
+		netlinkCancel  *rwcancel.RWCancel
+		port           uint16 // listening port
+		fwmark         uint32 // mark value (0 = disabled)
+		brokenRoaming  bool
 		network        string
 		framedOpts     conceal.FramedOpts
 		preludeOpts    conceal.PreludeOpts
@@ -306,6 +305,7 @@ func NewDevice(tunDevice tun.Device, bind conn.Bind, logger *Logger) *Device {
 	device.indexTable.Init()
 
 	device.net.network = "udp"
+	device.net.framedOpts.HeaderCompat = true
 
 	device.PopulatePools()
 

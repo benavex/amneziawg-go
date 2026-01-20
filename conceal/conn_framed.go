@@ -10,18 +10,19 @@ import (
 )
 
 type FramedOpts struct {
-	H1 *rangedHeader
-	H2 *rangedHeader
-	H3 *rangedHeader
-	H4 *rangedHeader
-	S1 int
-	S2 int
-	S3 int
-	S4 int
+	H1           *RangedHeader
+	H2           *RangedHeader
+	H3           *RangedHeader
+	H4           *RangedHeader
+	S1           int
+	S2           int
+	S3           int
+	S4           int
+	HeaderCompat bool
 }
 
 func (o *FramedOpts) HasIntersections() bool {
-	headers := []*rangedHeader{o.H1, o.H2, o.H3, o.H4}
+	headers := []*RangedHeader{o.H1, o.H2, o.H3, o.H4}
 
 	for i := range len(headers) {
 		left := headers[i]
@@ -51,28 +52,28 @@ func newFrameEncoding(opts FramedOpts) (e frameEncoding, ok bool) {
 		e.header.initial = *opts.H1
 		ok = true
 	} else {
-		e.header.initial = rangedHeader{WireguardMsgInitiationType, WireguardMsgInitiationType}
+		e.header.initial = RangedHeader{WireguardMsgInitiationType, WireguardMsgInitiationType}
 	}
 
 	if opts.H2 != nil {
 		e.header.response = *opts.H2
 		ok = true
 	} else {
-		e.header.response = rangedHeader{WireguardMsgResponseType, WireguardMsgResponseType}
+		e.header.response = RangedHeader{WireguardMsgResponseType, WireguardMsgResponseType}
 	}
 
 	if opts.H3 != nil {
 		e.header.cookie = *opts.H3
 		ok = true
 	} else {
-		e.header.cookie = rangedHeader{WireguardMsgCookieReplyType, WireguardMsgCookieReplyType}
+		e.header.cookie = RangedHeader{WireguardMsgCookieReplyType, WireguardMsgCookieReplyType}
 	}
 
 	if opts.H4 != nil {
 		e.header.transport = *opts.H4
 		ok = true
 	} else {
-		e.header.transport = rangedHeader{WireguardMsgTransportType, WireguardMsgTransportType}
+		e.header.transport = RangedHeader{WireguardMsgTransportType, WireguardMsgTransportType}
 	}
 
 	if opts.S1 != 0 {
@@ -95,15 +96,16 @@ func newFrameEncoding(opts FramedOpts) (e frameEncoding, ok bool) {
 		ok = true
 	}
 
+	e.compat = opts.HeaderCompat
 	return e, ok
 }
 
 type frameEncoding struct {
 	header struct {
-		initial   rangedHeader
-		response  rangedHeader
-		cookie    rangedHeader
-		transport rangedHeader
+		initial   RangedHeader
+		response  RangedHeader
+		cookie    RangedHeader
+		transport RangedHeader
 	}
 	padding struct {
 		initial   int
@@ -114,87 +116,127 @@ type frameEncoding struct {
 	compat bool
 }
 
-func (e *frameEncoding) encodeOne(dst, src []byte, header rangedHeader, padding int) int {
+func encodeOne(dst, src []byte, header RangedHeader, padding int) int {
+	rand.Read(dst[:padding])
+	dst = dst[padding:]
+
+	binary.LittleEndian.PutUint32(dst[:4], header.Generate())
+	dst = dst[4:]
+
+	n := copy(dst, src[4:])
+	return padding + 4 + n
+}
+
+func encodeOneCompat(dst, src []byte, padding int) int {
 	rand.Read(dst[:padding])
 	n := copy(dst[padding:], src)
-
-	if !e.compat {
-		binary.LittleEndian.PutUint32(dst[padding:padding+4], header.Generate())
-	}
-
 	return padding + n
 }
 
 func (e *frameEncoding) Encode(dst, src []byte) int {
+	if len(src) < 4 {
+		return 0
+	}
+
 	header := binary.LittleEndian.Uint32(src[:4])
+
 	if e.compat {
 		if e.header.initial.Validate(header) {
-			return e.encodeOne(dst, src, e.header.initial, e.padding.initial)
+			return encodeOneCompat(dst, src, e.padding.initial)
 		} else if e.header.response.Validate(header) {
-			return e.encodeOne(dst, src, e.header.response, e.padding.response)
+			return encodeOneCompat(dst, src, e.padding.response)
 		} else if e.header.cookie.Validate(header) {
-			return e.encodeOne(dst, src, e.header.cookie, e.padding.cookie)
+			return encodeOneCompat(dst, src, e.padding.cookie)
 		} else if e.header.transport.Validate(header) {
-			return e.encodeOne(dst, src, e.header.transport, e.padding.transport)
+			return encodeOneCompat(dst, src, e.padding.transport)
 		}
 	} else {
 		switch src[0] {
 		case WireguardMsgInitiationType:
-			return e.encodeOne(dst, src, e.header.initial, e.padding.initial)
+			return encodeOne(dst, src, e.header.initial, e.padding.initial)
 		case WireguardMsgResponseType:
-			return e.encodeOne(dst, src, e.header.response, e.padding.response)
+			return encodeOne(dst, src, e.header.response, e.padding.response)
 		case WireguardMsgCookieReplyType:
-			return e.encodeOne(dst, src, e.header.cookie, e.padding.cookie)
+			return encodeOne(dst, src, e.header.cookie, e.padding.cookie)
 		case WireguardMsgTransportType:
-			return e.encodeOne(dst, src, e.header.transport, e.padding.transport)
+			return encodeOne(dst, src, e.header.transport, e.padding.transport)
 		}
 	}
 
 	return 0
 }
 
-func (e *frameEncoding) decodeOne(b []byte, header rangedHeader, padding int, originalHeader uint32) (res []byte, ok bool) {
+func decodeOneCompat(b []byte, header RangedHeader, padding int) int {
 	bb := b[padding:]
 	if !header.Validate(binary.LittleEndian.Uint32(bb[:4])) {
-		return nil, false
+		return 0
 	}
 
-	n := copy(b, bb)
-	b = b[:n]
-
-	if !e.compat {
-		binary.LittleEndian.PutUint32(b[:4], originalHeader)
-	}
-
-	return b, true
+	return copy(b, bb)
 }
 
-func (e *frameEncoding) Decode(b []byte) []byte {
+func decodeOne(b []byte, header RangedHeader, padding int, originalHeader uint32) int {
+	bb := b[padding:]
+	if !header.Validate(binary.LittleEndian.Uint32(bb[:4])) {
+		return 0
+	}
+
+	binary.LittleEndian.PutUint32(b[:4], originalHeader)
+	n := copy(b[4:], bb[4:])
+
+	return 4 + n
+}
+
+func (e *frameEncoding) Decode(b []byte) int {
 	if len(b) == WireguardMsgInitiationSize+e.padding.initial {
-		if bb, ok := e.decodeOne(b, e.header.initial, e.padding.initial, WireguardMsgInitiationType); ok {
-			return bb
+		if e.compat {
+			if n := decodeOneCompat(b, e.header.initial, e.padding.initial); n != 0 {
+				return n
+			}
+		} else {
+			if n := decodeOne(b, e.header.initial, e.padding.initial, WireguardMsgInitiationType); n != 0 {
+				return n
+			}
 		}
 	}
 
 	if len(b) == WireguardMsgResponseSize+e.padding.response {
-		if bb, ok := e.decodeOne(b, e.header.response, e.padding.response, WireguardMsgResponseType); ok {
-			return bb
+		if e.compat {
+			if n := decodeOneCompat(b, e.header.response, e.padding.response); n != 0 {
+				return n
+			}
+		} else {
+			if n := decodeOne(b, e.header.response, e.padding.response, WireguardMsgResponseType); n != 0 {
+				return n
+			}
 		}
 	}
 
 	if len(b) == WireguardMsgCookieReplySize+e.padding.cookie {
-		if bb, ok := e.decodeOne(b, e.header.cookie, e.padding.cookie, WireguardMsgCookieReplyType); ok {
-			return bb
+		if e.compat {
+			if n := decodeOneCompat(b, e.header.cookie, e.padding.cookie); n != 0 {
+				return n
+			}
+		} else {
+			if n := decodeOne(b, e.header.cookie, e.padding.cookie, WireguardMsgCookieReplyType); n != 0 {
+				return n
+			}
 		}
 	}
 
 	if len(b) >= WireguardMsgTransportMinSize+e.padding.transport {
-		if bb, ok := e.decodeOne(b, e.header.transport, e.padding.transport, WireguardMsgTransportType); ok {
-			return bb
+		if e.compat {
+			if n := decodeOneCompat(b, e.header.transport, e.padding.transport); n != 0 {
+				return n
+			}
+		} else {
+			if n := decodeOne(b, e.header.transport, e.padding.transport, WireguardMsgTransportType); n != 0 {
+				return n
+			}
 		}
 	}
 
-	return b
+	return len(b)
 }
 
 func NewFramedConn(conn net.Conn, pool *sync.Pool, opts FramedOpts) (c *FramedConn, ok bool) {
@@ -218,8 +260,8 @@ type FramedConn struct {
 
 func (c *FramedConn) Read(b []byte) (n int, err error) {
 	n, err = c.Conn.Read(b)
-	b = c.enc.Decode(b[:n])
-	return len(b), err
+	n = c.enc.Decode(b[:n])
+	return n, err
 }
 
 func (c *FramedConn) Write(b []byte) (n int, err error) {
@@ -254,8 +296,8 @@ type FramedUDPConn struct {
 
 func (c *FramedUDPConn) ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net.UDPAddr, err error) {
 	n, oobn, flags, addr, err = c.UDPConn.ReadMsgUDP(b, oob)
-	b = c.enc.Decode(b[:n])
-	return len(b), oobn, flags, addr, err
+	n = c.enc.Decode(b[:n])
+	return n, oobn, flags, addr, err
 }
 
 func (c *FramedUDPConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
@@ -290,14 +332,16 @@ type FramedBatchConn struct {
 
 func (c *FramedBatchConn) ReadBatch(ms []ipv4.Message, flags int) (n int, err error) {
 	n, err = c.BatchConn.ReadBatch(ms, flags)
+	if err != nil {
+		return 0, err
+	}
 
 	for i := range ms[:n] {
 		b := ms[i].Buffers[0][:ms[i].N]
-		b = c.enc.Decode(b)
-		ms[i].N = len(b)
+		ms[i].N = c.enc.Decode(b)
 	}
 
-	return n, err
+	return n, nil
 }
 
 func (c *FramedBatchConn) WriteBatch(ms []ipv4.Message, flags int) (n int, err error) {
@@ -309,7 +353,7 @@ func (c *FramedBatchConn) WriteBatch(ms []ipv4.Message, flags int) (n int, err e
 		ms[i].Buffers[0] = t[:n]
 	}
 
-	// ms[x].N has incorrect N because the original data was modifier above
+	// ms[i].N has incorrect N because the original data was modifier above
 	// however, WG does not check this field, so this is fine
 	return c.BatchConn.WriteBatch(ms, flags)
 }

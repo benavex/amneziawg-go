@@ -160,6 +160,8 @@ func (device *Device) IpcGetOperation(w io.Writer) error {
 			sendf("format_out=%s", device.net.masqueradeOpts.RulesOut.Spec())
 		}
 
+		sendf("header_compat=%s", strconv.FormatBool(device.net.framedOpts.HeaderCompat))
+
 		for _, peer := range device.peers.keyMap {
 			// Serialize peer state.
 			peer.handshake.mutex.RLock()
@@ -573,29 +575,43 @@ func (device *Device) handleDeviceLine(key, value string) error {
 	case "format_in":
 		rules, err := conceal.ParseRules(value)
 		if err != nil {
-			return ipcErrorf(ipc.IpcErrorInvalid, "failed to parse obfuscators: %w", err)
+			return ipcErrorf(ipc.IpcErrorInvalid, "failed to parse rules: %w", err)
 		}
 
-		device.log.Verbosef("UAPI: Updating fmt_in")
+		device.log.Verbosef("UAPI: Updating format_in")
 		device.net.masqueradeOpts.RulesIn = rules
 
 		if err := device.BindUpdate(); err != nil {
 			// TODO: change IpcErrorPortInUse to something reasonable
-			return ipcErrorf(ipc.IpcErrorPortInUse, "failed to set fmt_in: %w", err)
+			return ipcErrorf(ipc.IpcErrorPortInUse, "failed to set format_in: %w", err)
 		}
 
 	case "format_out":
 		rules, err := conceal.ParseRules(value)
 		if err != nil {
-			return ipcErrorf(ipc.IpcErrorInvalid, "failed to parse obfuscators: %w", err)
+			return ipcErrorf(ipc.IpcErrorInvalid, "failed to parse rules: %w", err)
 		}
 
-		device.log.Verbosef("UAPI: Updating fmt_out")
+		device.log.Verbosef("UAPI: Updating format_out")
 		device.net.masqueradeOpts.RulesOut = rules
 
 		if err := device.BindUpdate(); err != nil {
 			// TODO: change IpcErrorPortInUse to something reasonable
-			return ipcErrorf(ipc.IpcErrorPortInUse, "failed to set fmt_out: %w", err)
+			return ipcErrorf(ipc.IpcErrorPortInUse, "failed to set format_out: %w", err)
+		}
+
+	case "header_compat":
+		compat, err := strconv.ParseBool(value)
+		if err != nil {
+			return ipcErrorf(ipc.IpcErrorInvalid, "failed to parse header_compat: %w", err)
+		}
+
+		device.log.Verbosef("UAPI: Updating header_compat")
+		device.net.framedOpts.HeaderCompat = compat
+
+		if err := device.BindUpdate(); err != nil {
+			// TODO: change IpcErrorPortInUse to something reasonable
+			return ipcErrorf(ipc.IpcErrorPortInUse, "failed to set header_compat: %w", err)
 		}
 
 	default:

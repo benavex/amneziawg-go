@@ -193,8 +193,16 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 
 	handshake.mixHash(handshake.remoteStatic[:])
 
+	opts := &device.net.framedOpts
+	var typ uint32
+	if opts.HeaderCompat && opts.H1 != nil {
+		typ = opts.H1.Generate()
+	} else {
+		typ = MessageInitiationType
+	}
+
 	msg := MessageInitiation{
-		Type:      MessageInitiationType,
+		Type:      typ,
 		Ephemeral: handshake.localEphemeral.publicKey(),
 	}
 
@@ -250,8 +258,15 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 		chainKey [blake2s.Size]byte
 	)
 
-	if msg.Type != MessageInitiationType {
-		return nil
+	opts := &device.net.framedOpts
+	if opts.HeaderCompat && opts.H1 != nil {
+		if !opts.H1.Validate(msg.Type) {
+			return nil
+		}
+	} else {
+		if msg.Type != MessageInitiationType {
+			return nil
+		}
 	}
 
 	device.staticIdentity.RLock()
@@ -366,8 +381,16 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 		return nil, err
 	}
 
+	opts := &device.net.framedOpts
+	var typ uint32
+	if opts.HeaderCompat && opts.H2 != nil {
+		typ = opts.H2.Generate()
+	} else {
+		typ = MessageResponseType
+	}
+
 	var msg MessageResponse
-	msg.Type = MessageResponseType
+	msg.Type = typ
 	msg.Sender = handshake.localIndex
 	msg.Receiver = handshake.remoteIndex
 
@@ -417,8 +440,15 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 }
 
 func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
-	if msg.Type != MessageResponseType {
-		return nil
+	opts := &device.net.framedOpts
+	if opts.HeaderCompat && opts.H2 != nil {
+		if !opts.H2.Validate(msg.Type) {
+			return nil
+		}
+	} else {
+		if msg.Type != MessageResponseType {
+			return nil
+		}
 	}
 
 	// lookup handshake by receiver

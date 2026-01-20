@@ -137,6 +137,19 @@ func (device *Device) RoutineReceiveIncoming(maxBatchSize int, recv conn.Receive
 			packet := bufsArrs[i][:size]
 			msgType := binary.LittleEndian.Uint32(packet[:4])
 
+			opts := &device.net.framedOpts
+			if opts.HeaderCompat {
+				if opts.H1 != nil && opts.H1.Validate(msgType) {
+					msgType = MessageInitiationType
+				} else if opts.H2 != nil && opts.H2.Validate(msgType) {
+					msgType = MessageResponseType
+				} else if opts.H3 != nil && opts.H3.Validate(msgType) {
+					msgType = MessageCookieReplyType
+				} else if opts.H4 != nil && opts.H4.Validate(msgType) {
+					msgType = MessageTransportType
+				}
+			}
+
 			switch msgType {
 
 			// check if transport
