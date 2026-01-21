@@ -26,7 +26,13 @@ func (b *StdNetBind) upgradeUDPConn(conn UDPConn) UDPConn {
 	if framed, ok := conceal.NewFramedUDPConn(conn, &b.bufPool, b.framedOpts); ok {
 		conn = framed
 	}
-	if prelude, ok := conceal.NewPreludeUDPConn(conn, origin, &b.bufPool, b.preludeOpts); ok {
+
+	var initHeader *conceal.RangedHeader
+	if b.framedOpts.HeaderCompat {
+		initHeader = b.framedOpts.H1
+	}
+
+	if prelude, ok := conceal.NewPreludeUDPConn(conn, origin, &b.bufPool, initHeader, b.preludeOpts); ok {
 		conn = prelude
 	}
 	return conn
@@ -40,7 +46,13 @@ func (b *StdNetBind) upgradePacketConn(conn LinuxPacketConn) LinuxPacketConn {
 	if framed, ok := conceal.NewFramedBatchConn(conn, &b.bufPool, b.framedOpts); ok {
 		conn = framed
 	}
-	if prelude, ok := conceal.NewPreludeBatchConn(conn, origin, &b.bufPool, &b.msgsPool, b.preludeOpts); ok {
+
+	var initHeader *conceal.RangedHeader
+	if b.framedOpts.HeaderCompat {
+		initHeader = b.framedOpts.H1
+	}
+
+	if prelude, ok := conceal.NewPreludeBatchConn(conn, origin, &b.bufPool, &b.msgsPool, initHeader, b.preludeOpts); ok {
 		conn = prelude
 	}
 	return conn

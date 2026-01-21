@@ -3,6 +3,7 @@ package conceal
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"math/big"
 	"net"
 	"sync"
@@ -38,7 +39,13 @@ func (p *junkGenerator) generate(b []byte) []byte {
 	return junk
 }
 
-func NewPreludeUDPConn(conn UDPConn, origin UDPConn, pool *sync.Pool, opts PreludeOpts) (c *PreludeUDPConn, ok bool) {
+func NewPreludeUDPConn(
+	conn UDPConn,
+	origin UDPConn,
+	pool *sync.Pool,
+	header *RangedHeader,
+	opts PreludeOpts,
+) (c *PreludeUDPConn, ok bool) {
 	empty := true
 	for _, rules := range opts.RulesArr {
 		if rules != nil {
@@ -62,6 +69,7 @@ func NewPreludeUDPConn(conn UDPConn, origin UDPConn, pool *sync.Pool, opts Prelu
 		rulesArr:  opts.RulesArr,
 		junkCount: opts.Jc,
 		junkGen:   newJunkGenerator(opts.Jmin, opts.Jmax),
+		header:    header,
 	}, true
 }
 
@@ -72,10 +80,21 @@ type PreludeUDPConn struct {
 	rulesArr  [5]Rules
 	junkCount int
 	junkGen   *junkGenerator
+	header    *RangedHeader
 }
 
 func (c *PreludeUDPConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
-	if len(b) > 0 && b[0] == WireguardMsgInitiationType {
+	var isInit bool
+	if len(b) >= 4 {
+		typ := binary.LittleEndian.Uint32(b[:4])
+		if c.header != nil {
+			isInit = c.header.Validate(typ)
+		} else {
+			isInit = typ == WireguardMsgInitiationType
+		}
+	}
+
+	if isInit {
 		b := c.pool.Get()
 		defer c.pool.Put(b)
 
@@ -110,7 +129,14 @@ func (c *PreludeUDPConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn 
 	return c.UDPConn.WriteMsgUDP(b, oob, addr)
 }
 
-func NewPreludeBatchConn(conn BatchConn, origin BatchConn, bufPool *sync.Pool, msgsPool *sync.Pool, opts PreludeOpts) (c *PreludeBatchConn, ok bool) {
+func NewPreludeBatchConn(
+	conn BatchConn,
+	origin BatchConn,
+	bufPool *sync.Pool,
+	msgsPool *sync.Pool,
+	header *RangedHeader,
+	opts PreludeOpts,
+) (c *PreludeBatchConn, ok bool) {
 	empty := true
 	for _, rules := range opts.RulesArr {
 		if rules != nil {
@@ -134,6 +160,7 @@ func NewPreludeBatchConn(conn BatchConn, origin BatchConn, bufPool *sync.Pool, m
 		rulesArr:  opts.RulesArr,
 		junkCount: opts.Jc,
 		junkGen:   newJunkGenerator(opts.Jmin, opts.Jmax),
+		header:    header,
 	}, true
 }
 
@@ -145,13 +172,24 @@ type PreludeBatchConn struct {
 	rulesArr  [5]Rules
 	junkCount int
 	junkGen   *junkGenerator
+	header    *RangedHeader
 }
 
 func (c *PreludeBatchConn) WriteBatch(ms []ipv4.Message, flags int) (n int, err error) {
 	var initMsg *ipv4.Message
 	for i := range ms {
 		b := ms[i].Buffers[0]
-		if len(b) > 0 && b[0] == WireguardMsgInitiationType {
+
+		var isInit bool
+		if len(b) >= 4 {
+			typ := binary.LittleEndian.Uint32(b[:4])
+			if c.header != nil {
+				isInit = c.header.Validate(typ)
+			} else {
+				isInit = typ == WireguardMsgInitiationType
+			}
+		}
+		if isInit {
 			initMsg = &ms[i]
 		}
 	}
