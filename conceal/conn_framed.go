@@ -270,7 +270,7 @@ func (c *FramedConn) Write(b []byte) (n int, err error) {
 
 	n = c.enc.Encode(t, b)
 	diff := n - len(b)
-	n, err = c.Conn.Write(t)
+	n, err = c.Conn.Write(t[:n])
 
 	return max(n-diff, 0), err
 }
