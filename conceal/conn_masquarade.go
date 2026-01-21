@@ -82,6 +82,7 @@ func NewMasqueradeUDPConn(conn UDPConn, pool *sync.Pool, opts MasqueradeOpts) (c
 	}
 
 	return &MasqueradeUDPConn{
+		UDPConn:  conn,
 		rulesIn:  opts.RulesIn,
 		rulesOut: opts.RulesOut,
 		pool:     WrapBufferPool(pool),
@@ -189,8 +190,8 @@ func (c *MasqueradeBatchConn) WriteBatch(ms []ipv4.Message, flags int) (n int, e
 			return 0, err
 		}
 
-		ms[i].Buffers[0] = t
+		ms[i].Buffers[0] = w.Bytes()
 	}
 
-	return c.WriteBatch(ms, flags)
+	return c.BatchConn.WriteBatch(ms, flags)
 }
