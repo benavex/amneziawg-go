@@ -133,7 +133,7 @@ func (peer *Peer) SendBuffers(buffers [][]byte) error {
 	}
 	peer.endpoint.Unlock()
 
-	err := peer.device.net.bind.Send(buffers, endpoint)
+	err := peer.device.net.bind.Send(buffers, endpoint, 0)
 	if err == nil {
 		var totalLen uint64
 		for _, b := range buffers {

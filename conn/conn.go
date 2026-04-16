@@ -45,9 +45,15 @@ type Bind interface {
 	// This mark is passed to the kernel as the socket option SO_MARK.
 	SetMark(mark uint32) error
 
-	// Send writes one or more packets in bufs to address ep. The length of
-	// bufs must not exceed BatchSize().
-	Send(bufs [][]byte, ep Endpoint) error
+	// Send writes one or more packets in bufs to address ep, starting at the
+	// given offset into each buffer. The length of bufs must not exceed
+	// BatchSize().
+	//
+	// The offset parameter was added to match Tailscale's wireguard-go fork
+	// so that tailscale.com's magicsock can be built against amneziawg-go
+	// without modification. amneziawg-go's native callers (device/send.go,
+	// device/peer.go) always pass offset=0.
+	Send(bufs [][]byte, ep Endpoint, offset int) error
 
 	// ParseEndpoint creates a new endpoint from a string.
 	ParseEndpoint(s string) (Endpoint, error)
@@ -82,6 +88,33 @@ type Endpoint interface {
 	DstToBytes() []byte  // used for mac2 cookie calculations
 	DstIP() netip.Addr
 	SrcIP() netip.Addr
+}
+
+// InitiationAwareEndpoint is an optional Endpoint extension that the
+// device layer calls when it receives a handshake-initiation message
+// before it has looked up the peer. Implementations can use the callback
+// to just-in-time configure the peer.
+//
+// This interface was added to match Tailscale's wireguard-go fork.
+// amneziawg-go's own device code does not currently invoke it; it exists
+// so that tailscale.com's magicsock compiles against this package.
+type InitiationAwareEndpoint interface {
+	// InitiationMessagePublicKey reports the static public key carried by
+	// an inbound handshake-initiation message for which this endpoint was
+	// the conn.Endpoint.
+	InitiationMessagePublicKey(peerPublicKey [32]byte)
+}
+
+// PeerAwareEndpoint is an optional Endpoint extension that the device
+// layer calls once it has identified the peer associated with an inbound
+// packet, enabling the bind to update its per-peer state.
+//
+// This interface was added to match Tailscale's wireguard-go fork. See
+// InitiationAwareEndpoint for the same compatibility caveat.
+type PeerAwareEndpoint interface {
+	// FromPeer is called with the static public key of the peer that owns
+	// the currently-processing packet.
+	FromPeer(peerPublicKey [32]byte)
 }
 
 var (

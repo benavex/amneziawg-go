@@ -107,8 +107,11 @@ func (c *ChannelBind) makeReceiveFunc(ch chan []byte) conn.ReceiveFunc {
 	}
 }
 
-func (c *ChannelBind) Send(bufs [][]byte, ep conn.Endpoint) error {
+func (c *ChannelBind) Send(bufs [][]byte, ep conn.Endpoint, offset int) error {
 	for _, b := range bufs {
+		if offset != 0 {
+			b = b[offset:]
+		}
 		select {
 		case <-c.closeSignal:
 			return net.ErrClosed

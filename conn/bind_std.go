@@ -338,7 +338,16 @@ func (e ErrUDPGSODisabled) Unwrap() error {
 	return e.RetryErr
 }
 
-func (s *StdNetBind) Send(bufs [][]byte, endpoint Endpoint) error {
+func (s *StdNetBind) Send(bufs [][]byte, endpoint Endpoint, offset int) error {
+	if offset != 0 {
+		// Shift each buffer view forward so downstream code sees only the
+		// packet bytes. The original slice backing memory is preserved.
+		out := make([][]byte, len(bufs))
+		for i := range bufs {
+			out[i] = bufs[i][offset:]
+		}
+		bufs = out
+	}
 	s.mu.Lock()
 	blackhole := s.blackhole4
 	conn := s.ipv4

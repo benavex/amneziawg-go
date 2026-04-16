@@ -251,7 +251,7 @@ func (device *Device) SendHandshakeCookie(initiatingElem *QueueHandshakeElement)
 	}
 
 	// TODO: allocation could be avoided
-	device.net.bind.Send([][]byte{packet}, initiatingElem.endpoint)
+	device.net.bind.Send([][]byte{packet}, initiatingElem.endpoint, 0)
 	return nil
 }
 
