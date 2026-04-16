@@ -133,7 +133,13 @@ func (peer *Peer) SendBuffers(buffers [][]byte) error {
 	}
 	peer.endpoint.Unlock()
 
-	err := peer.device.net.bind.Send(buffers, endpoint, 0)
+	// Reserve SendHeaderReservation bytes of headroom at the front of each
+	// buffer. The reservation is consumed by binds that inject an
+	// encapsulation header (e.g. Tailscale magicsock's 8-byte Geneve header
+	// for peer-relay VNIs). Binds that do not need the reservation slice
+	// past it (see StdNetBind.Send).
+	wrapped := wrapWithSendReservation(buffers)
+	err := peer.device.net.bind.Send(wrapped, endpoint, SendHeaderReservation)
 	if err == nil {
 		var totalLen uint64
 		for _, b := range buffers {
@@ -142,6 +148,27 @@ func (peer *Peer) SendBuffers(buffers [][]byte) error {
 		peer.txBytes.Add(totalLen)
 	}
 	return err
+}
+
+// SendHeaderReservation is the number of bytes reserved at the front of
+// every buffer passed to [Bind.Send]. Tailscale's magicsock writes an 8-byte
+// Geneve header into this reservation when sending via a peer relay; stock
+// StdNetBind simply slices past it. Keep in sync with
+// tailscale/net/packet.GeneveFixedHeaderLength.
+const SendHeaderReservation = 8
+
+// wrapWithSendReservation returns a new slice whose element i has
+// [SendHeaderReservation] zero bytes prepended to bufs[i]. The original
+// buffers are not modified. Input buffers typically live in pools that have
+// no headroom, so allocating here keeps [Bind.Send] callers simple.
+func wrapWithSendReservation(bufs [][]byte) [][]byte {
+	out := make([][]byte, len(bufs))
+	for i, b := range bufs {
+		buf := make([]byte, SendHeaderReservation+len(b))
+		copy(buf[SendHeaderReservation:], b)
+		out[i] = buf
+	}
+	return out
 }
 
 func (peer *Peer) String() string {
