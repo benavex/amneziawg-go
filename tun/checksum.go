@@ -83,13 +83,19 @@ func checksumNoFold(b []byte, initial uint64) uint64 {
 	return binary.BigEndian.Uint64(tmp)
 }
 
-func checksum(b []byte, initial uint64) uint16 {
+// Checksum computes an IP checksum over b with an initial value.
+func Checksum(b []byte, initial uint64) uint16 {
 	ac := checksumNoFold(b, initial)
 	ac = (ac >> 16) + (ac & 0xffff)
 	ac = (ac >> 16) + (ac & 0xffff)
 	ac = (ac >> 16) + (ac & 0xffff)
 	ac = (ac >> 16) + (ac & 0xffff)
 	return uint16(ac)
+}
+
+// PseudoHeaderChecksum computes the pseudo-header checksum used by TCP/UDP.
+func PseudoHeaderChecksum(protocol uint8, srcAddr, dstAddr []byte, totalLen uint16) uint16 {
+	return Checksum(nil, pseudoHeaderChecksumNoFold(protocol, srcAddr, dstAddr, totalLen))
 }
 
 func pseudoHeaderChecksumNoFold(protocol uint8, srcAddr, dstAddr []byte, totalLen uint16) uint64 {

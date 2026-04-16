@@ -40,7 +40,7 @@ func TestChecksum(t *testing.T) {
 		buf := make([]byte, length)
 		rng := rand.New(rand.NewSource(1))
 		rng.Read(buf)
-		csum := checksum(buf, 0x1234)
+		csum := Checksum(buf, 0x1234)
 		csumRef := checksumRef(buf, 0x1234)
 		if csum != csumRef {
 			t.Error("Expected checksum", csumRef, "got", csum)
@@ -59,7 +59,7 @@ func TestPseudoHeaderChecksum(t *testing.T) {
 			rng.Read(dstAddr)
 			rng.Read(buf)
 			phSum := pseudoHeaderChecksumNoFold(unix.IPPROTO_TCP, srcAddr, dstAddr, uint16(length))
-			csum := checksum(buf, phSum)
+			csum := Checksum(buf, phSum)
 			phSumRef := pseudoHeaderChecksumRefNoFold(unix.IPPROTO_TCP, srcAddr, dstAddr, uint16(length))
 			csumRef := checksumRef(buf, phSumRef)
 			if csum != csumRef {
@@ -91,7 +91,7 @@ func BenchmarkChecksum(b *testing.B) {
 			rng.Read(buf)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				checksum(buf, 0)
+				Checksum(buf, 0)
 			}
 		})
 	}
