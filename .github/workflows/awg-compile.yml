@@ -35,8 +35,12 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build ./...
+          # Exclude ./outline: transitively pulls in outline-sdk/x/smart whose
+          # lookupCNAME is cgo-only on unix, so it won't build with CGO_ENABLED=0.
+          # The outline package is a standalone fallback client, unused by the
+          # Tailscale integration (which consumes conn/, device/, tun/).
+          go build $(go list ./... | grep -v '/outline$')
 
       - name: Test
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        run: go test ./...
+        run: go test $(go list ./... | grep -v '/outline$')
